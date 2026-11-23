@@ -1312,7 +1312,7 @@ document.getElementById("btn-flags-clear-all").addEventListener("click", () => {
 // AVATAR (critică amuzantă când greșești)
 // ---------------------------------------------------------------------
 const AV_KEY = FLAGS_KEY.replace("flags", "avatar");
-let avCfg = { on: true, voice: true, level: 3, engine: "google" };
+let avCfg = { on: true, voice: true, level: 3, engine: "device" };
 try { const r = localStorage.getItem(AV_KEY); if (r) Object.assign(avCfg, JSON.parse(r)); } catch (e) {}
 function avSave() { try { localStorage.setItem(AV_KEY, JSON.stringify(avCfg)); } catch (e) {} }
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
