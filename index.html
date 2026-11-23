@@ -1399,17 +1399,39 @@ function avShow(q, selected, speak) {
   const p = document.createElement("span"); p.textContent = r.text;
   tx.appendChild(nm); tx.appendChild(p);
   if (!speak || !avCfg.voice) return;
+  avSpeakText(r.text, r.good, box);
+}
+function avPickVoice() {
+  let voices = [];
+  try { voices = window.speechSynthesis.getVoices() || []; } catch (e) {}
+  const ro = voices.filter(x => /^ro/i.test(x.lang) || /roman/i.test(x.name));
+  if (!ro.length) return null;
+  const score = v => (/premium|enhanced|neural|natural|online|wavenet/i.test(v.name) ? 5 : 0) + (/google/i.test(v.name) ? 3 : 0) + (/ioana|alina|emil/i.test(v.name) ? 2 : 0) + (v.localService ? 0 : 1);
+  ro.sort((x, y) => score(y) - score(x));
+  return ro[0];
+}
+if (window.speechSynthesis) { try { window.speechSynthesis.onvoiceschanged = () => {}; window.speechSynthesis.getVoices(); } catch (e) {} }
+function avSpeakText(text, good, box) {
   try {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(r.text);
-    u.lang = "ro-RO"; u.rate = 1.05; u.pitch = r.good ? 1.0 : 0.8;
-    const voices = window.speechSynthesis.getVoices();
-    const v = voices.find(x => /^ro/i.test(x.lang));
-    if (v) u.voice = v;
-    u.onstart = () => { box.classList.add("talking"); avSpeaking = true; };
-    u.onend = u.onerror = () => { box.classList.remove("talking"); avSpeaking = false; };
-    window.speechSynthesis.speak(u);
+    const clean = text.replace(/[„”"“]/g, "").replace(/\s+/g, " ");
+    // fraze separate, cu pauze mici și variații de ritm/ton ca să sune mai uman
+    const parts = clean.match(/[^.!?;:]+[.!?;:]?/g) || [clean];
+    const v = avPickVoice();
+    let left = parts.length;
+    parts.forEach((p, i) => {
+      p = p.trim(); if (!p) { left--; return; }
+      const u = new SpeechSynthesisUtterance(p);
+      u.lang = "ro-RO"; if (v) u.voice = v;
+      const ex = /[!?]$/.test(p), lastp = i === parts.length - 1;
+      u.rate = (good ? 0.98 : ex ? 1.12 : 1.02) + (Math.random() * 0.08 - 0.04);
+      u.pitch = (good ? 1.0 : ex ? 0.78 : 0.88) + (Math.random() * 0.12 - 0.06);
+      u.volume = 1;
+      if (i === 0) u.onstart = () => { box.classList.add("talking"); avSpeaking = true; };
+      u.onend = u.onerror = () => { left--; if (left <= 0 || lastp) { box.classList.remove("talking"); avSpeaking = false; } };
+      window.speechSynthesis.speak(u);
+    });
   } catch (e) {}
 }
 (function initAv() {
