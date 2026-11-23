@@ -594,6 +594,7 @@
       <h2>🗣️ Avatarul care te judecă</h2>
       <label><input type="checkbox" id="av-on"> Activat (te critică când greșești)</label>
       <label><input type="checkbox" id="av-voice"> Cu voce (citește cu voce tare)</label>
+      <label>Tip de voce: <select id="av-engine"><option value="google">Voce online (mai naturală)</option><option value="device">Vocea telefonului</option></select></label>
       <label>Cât de dur: <select id="av-level"><option value="1">1 · Blând</option><option value="2">2 · Dur</option><option value="3">3 · Fără milă, cu înjurături</option></select></label>
     </div>
     <div class="collections" id="collections-list"></div>
@@ -1311,7 +1312,7 @@ document.getElementById("btn-flags-clear-all").addEventListener("click", () => {
 // AVATAR (critică amuzantă când greșești)
 // ---------------------------------------------------------------------
 const AV_KEY = FLAGS_KEY.replace("flags", "avatar");
-let avCfg = { on: true, voice: true, level: 3 };
+let avCfg = { on: true, voice: true, level: 3, engine: "google" };
 try { const r = localStorage.getItem(AV_KEY); if (r) Object.assign(avCfg, JSON.parse(r)); } catch (e) {}
 function avSave() { try { localStorage.setItem(AV_KEY, JSON.stringify(avCfg)); } catch (e) {} }
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
@@ -1381,7 +1382,11 @@ function avInsult() {
   return a;
 }
 let avSpeaking = false;
+let avTok = 0;
+const avAudio = (typeof Audio !== "undefined") ? new Audio() : null;
 function avStop() {
+  avTok++;
+  try { if (avAudio) { avAudio.pause(); } } catch (e) {}
   try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
   const b = document.getElementById("avatar-box"); if (b) b.classList.remove("talking");
   avSpeaking = false;
@@ -1411,7 +1416,42 @@ function avPickVoice() {
   return ro[0];
 }
 if (window.speechSynthesis) { try { window.speechSynthesis.onvoiceschanged = () => {}; window.speechSynthesis.getVoices(); } catch (e) {} }
+function avChunks(text) {
+  const out = [];
+  (text.match(/[^.!?;:]+[.!?;:]?/g) || [text]).forEach(p => {
+    p = p.trim(); if (!p) return;
+    while (p.length > 170) {
+      let k = p.lastIndexOf(",", 170); if (k < 40) k = p.lastIndexOf(" ", 170); if (k < 40) k = 170;
+      out.push(p.slice(0, k + 1).trim()); p = p.slice(k + 1).trim();
+    }
+    if (p) out.push(p);
+  });
+  return out;
+}
+function avSpeakOnline(text, good, box) {
+  const clean = text.replace(/[„”"“]/g, "").replace(/\s+/g, " ");
+  const chunks = avChunks(clean);
+  const tok = ++avTok;
+  let i = 0;
+  const fallback = () => { if (tok === avTok) avSpeakDevice(chunks.slice(i).join(" "), good, box); };
+  const next = () => {
+    if (tok !== avTok) return;
+    if (i >= chunks.length) { box.classList.remove("talking"); avSpeaking = false; return; }
+    avAudio.onended = () => { i++; next(); };
+    avAudio.onerror = fallback;
+    avAudio.src = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=ro&q=" + encodeURIComponent(chunks[i]);
+    avAudio.onplaying = () => { if (tok === avTok) { box.classList.add("talking"); avSpeaking = true; } };
+    const pr = avAudio.play();
+    if (pr && pr.catch) pr.catch(fallback);
+  };
+  try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
+  next();
+}
 function avSpeakText(text, good, box) {
+  if (avCfg.engine !== "device" && avAudio) { avSpeakOnline(text, good, box); return; }
+  avSpeakDevice(text, good, box);
+}
+function avSpeakDevice(text, good, box) {
   try {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
@@ -1439,6 +1479,8 @@ function avSpeakText(text, good, box) {
   on.checked = !!avCfg.on; vo.checked = !!avCfg.voice; lv.value = String(avCfg.level);
   on.addEventListener("change", () => { avCfg.on = on.checked; avSave(); });
   vo.addEventListener("change", () => { avCfg.voice = vo.checked; avSave(); if (vo.checked) { try { const u = new SpeechSynthesisUtterance("Gata, mă auzi."); u.lang = "ro-RO"; const v = window.speechSynthesis.getVoices().find(x => /^ro/i.test(x.lang)); if (v) u.voice = v; window.speechSynthesis.speak(u); } catch (e) {} } else avStop(); });
+  const en = document.getElementById("av-engine"); en.value = avCfg.engine;
+  en.addEventListener("change", () => { avCfg.engine = en.value; avSave(); });
   lv.addEventListener("change", () => { avCfg.level = parseInt(lv.value, 10) || 3; avSave(); });
 })();
 document.getElementById("btn-check").addEventListener("click", () => {
